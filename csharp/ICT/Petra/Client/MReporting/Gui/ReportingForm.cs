@@ -1762,6 +1762,11 @@ namespace Ict.Petra.Client.MReporting.Gui
         public double FColumnWidth;
 
         /// <summary>
+        /// 
+        /// </summary>
+        public Boolean FNeedLocalDataFieldLabel;
+
+        /// <summary>
         /// constructor used for functions between columns
         ///
         /// </summary>
@@ -1770,6 +1775,7 @@ namespace Ict.Petra.Client.MReporting.Gui
             base(ADescription, ANumberColumns)
         {
             FColumnWidth = AColumnWidth;
+            FNeedLocalDataFieldLabel = false;
         }
 
         /// <summary>
@@ -1779,6 +1785,7 @@ namespace Ict.Petra.Client.MReporting.Gui
         public TPartnerColumnFunction(String ADescription) : base(ADescription)
         {
             FColumnWidth = 2.0;
+            FNeedLocalDataFieldLabel = false;
         }
 
         /// <summary>
@@ -1789,6 +1796,19 @@ namespace Ict.Petra.Client.MReporting.Gui
         public TPartnerColumnFunction(String ADescription, double AColumnWidth) : base(ADescription)
         {
             FColumnWidth = AColumnWidth;
+            FNeedLocalDataFieldLabel = false;
+        }
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="ADescription">Name of the field</param>
+        /// <param name="AColumnWidth">Default width</param>
+        /// <param name="ANeedFieldLabel">'true' if this column needs a local data field setting</param>
+        public TPartnerColumnFunction( String ADescription, double AColumnWidth, bool ANeedFieldLabel) : base(ADescription)
+        {
+            FColumnWidth = AColumnWidth;
+            FNeedLocalDataFieldLabel = ANeedFieldLabel;
         }
 
         /// <summary>
@@ -1803,6 +1823,7 @@ namespace Ict.Petra.Client.MReporting.Gui
             base(ADescription, ACalculationParameterName, ACalculationParameterValue)
         {
             FColumnWidth = AColumnWidth;
+            FNeedLocalDataFieldLabel = false;
         }
 
         /// <summary>

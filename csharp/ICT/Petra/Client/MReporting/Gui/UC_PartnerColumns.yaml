@@ -69,6 +69,7 @@ RootNode:
             Controls:
                 Row0: [cmbCalculation]
                 Row1: [txtColumnWidth, lblCm]
+                Row2: [cmbFieldLabelSelection]
         pnlLowerButtons:
             Dock: Bottom
             Controls:
@@ -77,6 +78,9 @@ RootNode:
             Label: Content of Column
             Width: 250
             ColSpan: 2
+        cmbFieldLabelSelection:
+            Label: Data Field Label
+            Width: 250
         txtColumnWidth:
             Label: Width of Column
             Width: 50

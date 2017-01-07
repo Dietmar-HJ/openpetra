@@ -91,6 +91,58 @@ namespace Ict.Petra.Client.MReporting.Gui
             btnCancel.Enabled = false;
             txtColumnWidth.Enabled = false;
             cmbCalculation.Enabled = false;
+            cmbFieldLabelSelection.Visible = false;
+            lblFieldLabelSelection.Visible = false;
+
+            // put existing data-field-labels into combobox
+            String UseFilter = String.Empty;
+            Byte UseCount = 0;
+            DataRow[] filteredRows;
+
+            PDataLabelUseTable DataLabelUse = (PDataLabelUseTable)TDataCache.TMPartner.GetCacheablePartnerTable(TCacheablePartnerTablesEnum.DataLabelUseList);
+            filteredRows = DataLabelUse.Select("(" + DataLabelUse.ColumnUse.ColumnName + " = 'Person') OR (" + DataLabelUse.ColumnUse.ColumnName + " = 'PERSON')");
+            foreach (PDataLabelUseRow UseRow in filteredRows)
+            {
+                if (UseCount > 0) { UseFilter += ","; }
+                UseFilter += UseRow.DataLabelKey.ToString();
+                UseCount++;
+            }
+
+            cmbFieldLabelSelection.Items.Clear();
+            if (UseCount > 0)
+            {
+                if (UseCount > 1)
+                {
+                    UseFilter = PDataLabelTable.GetKeyDBName() + " IN (" + UseFilter + ")";
+                }
+                else
+                {
+                    UseFilter = PDataLabelTable.GetKeyDBName() + " = " + UseFilter;
+                }
+                PDataLabelTable DataLabels = (PDataLabelTable)TDataCache.TMPartner.GetCacheablePartnerTable(TCacheablePartnerTablesEnum.DataLabelList);
+                filteredRows = DataLabels.Select(UseFilter);
+                foreach (PDataLabelRow DataRow in filteredRows)
+                {
+                    String DisplayText = (DataRow.IsGroupNull() ? "" : DataRow.Group + " / ") + DataRow.Text;
+                    cmbFieldLabelSelection.Items.Add(new KeyValuePair<string, string>(DataRow.Key.ToString(), DisplayText));
+                }
+                cmbFieldLabelSelection.DisplayMember = "Value";
+                cmbFieldLabelSelection.ValueMember = "Key";
+            }
+        }
+
+        /// <summary>
+        /// workaround because combobox-property "SelectedValue" doesn't work as intended...
+        /// </summary>
+        /// <returns></returns>
+        private String GetFieldLabelSelection_SelectedValue()
+        {
+            String returnValue = String.Empty;
+            if (cmbFieldLabelSelection.SelectedIndex >= 0)
+            {
+                returnValue = ((KeyValuePair<string,string>)cmbFieldLabelSelection.SelectedItem).Key;
+            }
+            return returnValue;
         }
 
         #region Parameter/Settings Handling
@@ -164,6 +216,7 @@ namespace Ict.Petra.Client.MReporting.Gui
                 if (SelectedFunction == Func.GetDisplayValue())
                 {
                     txtColumnWidth.Text = Func.FColumnWidth.ToString();
+                    SwitchDataFieldLabelControls(Func, -1);
                 }
             }
         }
@@ -303,7 +356,43 @@ namespace Ict.Petra.Client.MReporting.Gui
                 changed = true;
             }
 
+            if (cmbFieldLabelSelection.Visible && (FColumnParameters.Get("DataFieldLabelKey", ASelectedColumn).ToString() != GetFieldLabelSelection_SelectedValue()))
+            {
+                changed = true;
+            }
+
             return changed;
+        }
+
+        private void SwitchDataFieldLabelControls(TPartnerColumnFunction AFunc, Int32 ASelectedColumn)
+        {
+            if (AFunc.FNeedLocalDataFieldLabel)
+            {
+                cmbFieldLabelSelection.Visible = true;
+                lblFieldLabelSelection.Visible = true;
+
+                String fldLabelKey = FColumnParameters.Get("DataFieldLabelKey", ASelectedColumn).ToString();
+                if (!String.IsNullOrEmpty(fldLabelKey))
+                {
+                    for (int idx = 0; idx < cmbFieldLabelSelection.Items.Count; idx++)
+                    {
+                        if (((KeyValuePair<string,string>)cmbFieldLabelSelection.Items[idx]).Key == fldLabelKey)
+                        {
+                            cmbFieldLabelSelection.SelectedIndex = idx;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    cmbFieldLabelSelection.SelectedIndex = 0;
+                }
+            }
+            else
+            {
+                cmbFieldLabelSelection.Visible = false;
+                lblFieldLabelSelection.Visible = false;
+            }
         }
 
         /// <summary>
@@ -345,6 +434,8 @@ namespace Ict.Petra.Client.MReporting.Gui
                 /* this does not work, because ASelectedColumn is probably 1 */
             }
 
+            cmbFieldLabelSelection.Visible = false;
+            lblFieldLabelSelection.Visible = false;
             if (ASelectedColumn > -1)
             {
                 grdColumns.Selection.ResetSelection(false);
@@ -366,6 +457,7 @@ namespace Ict.Petra.Client.MReporting.Gui
                 {
                     cmbCalculation.SetSelectedString(Func.GetDisplayValue());
                     txtColumnWidth.Text = FColumnParameters.GetOrDefault("ColumnWidth", ASelectedColumn, new TVariant(Func.FColumnWidth)).ToString();
+                    SwitchDataFieldLabelControls(Func, ASelectedColumn);
                 }
 
                 cmbCalculation.Enabled = true;
@@ -469,6 +561,10 @@ namespace Ict.Petra.Client.MReporting.Gui
                     ColumnWidth = Convert.ToDouble(txtColumnWidth.Text);
                     FColumnParameters.Add("param_calculation", new TVariant(cmbCalculation.GetSelectedString()), ASelectedColumn);
                     FColumnParameters.Add("ColumnWidth", new TVariant(ColumnWidth), ASelectedColumn);
+                    if (cmbFieldLabelSelection.Visible)
+                    {
+                        FColumnParameters.Add("DataFieldLabelKey", new TVariant(GetFieldLabelSelection_SelectedValue()), ASelectedColumn);
+                    }
                     ReturnValue = true;
                 }
                 catch (Exception e)
