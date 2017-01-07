@@ -104,10 +104,10 @@
 			</calculation>
 
 			<calculation id="GetCommitmentPeriodAndEmail" returnsFormat="internal"
-					returns="CommitmentStart,CommitmentEnd,CountryOfService,EmailAddress">
+					returns="CommitmentStart,CommitmentEnd,CountryOfService,CaringPerson,EmailAddress">
 				<query>
 					<queryDetail>
-						<value function="GetCurrentCommitmentPeriod({{PartnerKey}},{#param_currentstaffdate#})"/>
+						<value function="GetCurrentCommitmentPeriod({{PartnerKey}},{param_currentstaffdate})"/>
 						<value function="GetPartnerBestAddress({PartnerKey})"/>
 						<value function="assign(Telephone, {TelephoneNumber})"/>
 					</queryDetail>
@@ -220,6 +220,17 @@
           </queryDetail>
         </query>
       </calculation>
+
+      <calculation id="Caring Person" returnsFormat="text" returns="text">
+        <caption>
+          <value text="Cared by Person"/>
+        </caption>
+        <query>
+          <queryDetail>
+            <value variable="CaringPerson"/>
+          </queryDetail>
+        </query>
+      </calculation>      
 
       <calculation id="Gender" returnsFormat="text" returns="text">
 				<caption><value text="Gender"/></caption>
