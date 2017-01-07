@@ -228,84 +228,110 @@ namespace Ict.Petra.Server.MReporting.MPersonnel
         }
 
         /// <summary>
-        /// This functions finds the commitment period of a given partner, at a given time
-        /// The result is stored in the variables CommitmentStart
-        /// and CommitmentEnd. The end date might be empty, even if the start date is set
+        /// This functions finds the commitment period of a given partner, at a given time.
+        /// The result is stored in the variables CommitmentStart and CommitmentEnd. 
+        /// The end date might be empty, even if the start date is set. 
+        /// It also puts the country of service and the caring person into the variables 
+        /// CountryOfService and CaringPerson
         ///
-        /// It will find the most recent commitment,
-        /// that starts on or before the given date and
-        /// lasts till or beyond the given date (also open ended).
-        /// If no such commitment exists, the most recent commitment of all will be returned.
-        ///
+        /// If there is more than one commitment it'll take the most recent one, that starts on or before 
+        /// the given date. Otherwise the most recent commitment of all or even the only existing one
+        /// will be returned.
         /// </summary>
-        /// <returns>s true if a current commitment period was found
+        /// <returns>is true if a current commitment period was found
         /// </returns>
         private bool GetCurrentCommitmentPeriod(Int64 APartnerKey, DateTime AGivenDate)
         {
-            bool ReturnValue;
-            string strSql;
+            String strSql;
             DataTable tab;
-            TRptFormatQuery formatQuery;
+            String strLabelDataType = String.Empty;
+            Int32 iDummy = -1;
+
+            // first lets check if a LabelKey parameter is at hand, there should be one column only at most 
+            String strLabelKey = situation.GetParameters().Get("DataFieldLabelKey")?.ToString();
+            if (!String.IsNullOrEmpty(strLabelKey) && Int32.TryParse(strLabelKey, out iDummy) && (iDummy >= 0))
+            {
+                // we need to know the data type of the selected LocalDataField
+                strSql = "SELECT p_data_type_c " +
+                         "FROM PUB_p_data_label " +
+                         "WHERE p_key_i = " + strLabelKey;
+                tab = situation.GetDatabaseConnection().SelectDT(strSql, "table", situation.GetDatabaseConnection().Transaction);
+                if (tab.Rows.Count > 0)
+                {
+                    strLabelDataType = tab.Rows[0][0].ToString(); // only one row possible
+                }
+                tab = null;
+            }
 
             System.Object StartDate = DateTime.MinValue;
             System.Object EndDate = DateTime.MinValue;
             System.Object CountryCode = String.Empty;
-            ReturnValue = false;
-            strSql = "SELECT pm_start_of_commitment_d, pm_end_of_commitment_d, p_country_code_c " +
-                     "FROM PUB_pm_staff_data, PUB_p_unit " +
-                     "WHERE PUB_pm_staff_data.pm_receiving_field_n = PUB_p_unit.p_partner_key_n " +
-                       "AND PUB_pm_staff_data.p_partner_key_n = " + APartnerKey.ToString() + ' ' + 
-                       "AND pm_start_of_commitment_d <= {#" + StringHelper.DateToStr(AGivenDate, "dd/MM/yyyy") + "#} " + 
-                       "AND (pm_end_of_commitment_d >= {#" + StringHelper.DateToStr(AGivenDate, "dd/MM/yyyy") + "#} " + 
-                       "     OR pm_end_of_commitment_d IS NULL) " + 
-                     "ORDER BY pm_start_of_commitment_d ASC";
-            formatQuery = new TRptFormatQuery(null, -1, -1);
-            strSql = formatQuery.ReplaceVariables(strSql).ToString();
-            formatQuery = null;
-            tab = situation.GetDatabaseConnection().SelectDT(strSql, "table", situation.GetDatabaseConnection().Transaction);
+            System.Object CaringPerson = String.Empty;
 
+            strSql = "SELECT pm_start_of_commitment_d, pm_end_of_commitment_d, p_country_code_c";
+            switch (strLabelDataType) {
+                case "char":       strSql += ", DLVP.p_value_char_c AS caringperson "; break;
+                case "partnerkey": strSql += ", CONCAT_WS(', ', PP.p_partner_key_n, PP.p_partner_short_name_c) AS caringperson "; break; // SQLite ???
+                default:           strLabelDataType = String.Empty; break;    
+            }
+            strSql += "FROM PUB_pm_staff_data " + 
+                           "LEFT JOIN PUB_p_unit " + 
+                             "ON PUB_pm_staff_data.pm_receiving_field_n = PUB_p_unit.p_partner_key_n ";
+            if (strLabelDataType.Length > 0)
+            {
+                strSql += "LEFT JOIN (PUB_p_data_label_value_partner DLVP ";
+                if (strLabelDataType == "partnerkey")
+                {
+                    strSql += "INNER JOIN PUB_p_partner PP ON PP.p_partner_key_n = DLVP.p_value_partner_key_n";
+                }
+                strSql += ") ON (DLVP.p_partner_key_n = PUB_pm_staff_data.p_partner_key_n) AND (DLVP.p_data_label_key_i = " + strLabelKey + ") ";
+            }
+            strSql += "WHERE (PUB_pm_staff_data.p_partner_key_n = " + APartnerKey.ToString() + ") " +
+                      "ORDER BY pm_start_of_commitment_d DESC";
+
+            tab = situation.GetDatabaseConnection().SelectDT(strSql, "table", situation.GetDatabaseConnection().Transaction);
             if (tab.Rows.Count > 0)
             {
-                // take the last row, the most recent start date
-                ReturnValue = true;
-                StartDate = tab.Rows[tab.Rows.Count - 1]["pm_start_of_commitment_d"];
-                EndDate = tab.Rows[tab.Rows.Count - 1]["pm_end_of_commitment_d"];
-                CountryCode = tab.Rows[tab.Rows.Count - 1]["p_country_code_c"];
+                // check for proper start date and begin at first row which is the most recent date
+                int idx = -1;
+                do
+                {
+                    idx++;
+                    DateTime dtStart = Convert.ToDateTime(tab.Rows[idx]["pm_start_of_commitment_d"]);
+                    if (dtStart <= AGivenDate)
+                    {
+                        // EndDate doesn't matter here as rows are ordered descending by StartDate
+                        // and any next row must definitely be an older commitment, if any
+                        break;
+                    }
+                }
+                while ((idx + 1) < tab.Rows.Count);
+
+                StartDate    = tab.Rows[idx]["pm_start_of_commitment_d"];
+                EndDate      = tab.Rows[idx]["pm_end_of_commitment_d"];
+                CountryCode  = tab.Rows[idx]["p_country_code_c"];
+                CaringPerson = tab.Rows[idx]["caringperson"];
+
+                situation.GetParameters().Add("CommitmentStart", new TVariant(StartDate), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
+                situation.GetParameters().Add("CommitmentEnd", new TVariant(EndDate), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
+                situation.GetParameters().Add("CountryOfService", new TVariant(CountryCode), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
+                if (CaringPerson != null)
+                {
+                    situation.GetParameters().Add("CaringPerson", new TVariant(CaringPerson), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
+                } else {
+                    situation.GetParameters().RemoveVariable("CaringPerson", -1, -1, eParameterFit.eExact);
+                }
+                return true;
             }
             else
-            {
-                // no commitment period for the given date was found, so find the most recent commitment
-                strSql = "SELECT pm_start_of_commitment_d, pm_end_of_commitment_d, p_country_code_c " +
-                         "FROM PUB_pm_staff_data " +
-                         "LEFT JOIN PUB_p_unit ON PUB_pm_staff_data.pm_receiving_field_n = PUB_p_unit.p_partner_key_n " +
-                         "WHERE PUB_pm_staff_data.p_partner_key_n = " + APartnerKey.ToString() + ' ' + 
-                         "ORDER BY pm_start_of_commitment_d ASC";
-                tab = situation.GetDatabaseConnection().SelectDT(strSql, "table", situation.GetDatabaseConnection().Transaction);
-
-                if (tab.Rows.Count > 0)
-                {
-                    // take the last row, the most recent start date
-                    ReturnValue = true;
-                    StartDate = tab.Rows[tab.Rows.Count - 1]["pm_start_of_commitment_d"];
-                    EndDate = tab.Rows[tab.Rows.Count - 1]["pm_end_of_commitment_d"];
-                    CountryCode = tab.Rows[tab.Rows.Count - 1]["p_country_code_c"];
-                }
-            }
-
-            if (!ReturnValue)
             {
                 situation.GetParameters().RemoveVariable("CommitmentStart", -1, -1, eParameterFit.eExact);
                 situation.GetParameters().RemoveVariable("CommitmentEnd", -1, -1, eParameterFit.eExact);
                 situation.GetParameters().RemoveVariable("CountryOfService", -1, -1, eParameterFit.eExact);
-            }
-            else
-            {
-                situation.GetParameters().Add("CommitmentStart", new TVariant(StartDate), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
-                situation.GetParameters().Add("CommitmentEnd", new TVariant(EndDate), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
-                situation.GetParameters().Add("CountryOfService", new TVariant(CountryCode), -1, -1, null, null, ReportingConsts.CALCULATIONPARAMETERS);
-            }
+                situation.GetParameters().RemoveVariable("CaringPerson", -1, -1, eParameterFit.eExact);
 
-            return ReturnValue;
+                return false;
+            }
         }
 
         /// <summary>
